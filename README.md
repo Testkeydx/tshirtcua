@@ -192,8 +192,23 @@ The agent automates the complete workflow:
 **Basic Usage**:
 
 ```bash
-python orgo_agent.py --github-url https://your-username.github.io/your-repo/
+python orgo_agent.py --github-url https://testkeydx.github.io/tshirtcua/
 ```
+
+### GitHub Pages Setup
+
+The repository includes a GitHub Pages site that hosts CSV files for the agent to download.
+
+**To enable GitHub Pages:**
+
+1. Go to your repository on GitHub: `https://github.com/Testkeydx/tshirtcua`
+2. Navigate to **Settings** → **Pages**
+3. Under **Source**, select:
+   - **Source**: `GitHub Actions`
+4. The GitHub Actions workflow will automatically deploy the site
+5. Your site will be available at: `https://testkeydx.github.io/tshirtcua/`
+
+The `index.html` file provides a simple interface to download CSV files from the `input/` directory. The Orgo agent can navigate to this page and download the files automatically.
 
 **Advanced Options**:
 

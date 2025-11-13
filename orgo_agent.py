@@ -14,6 +14,14 @@ import os
 import logging
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
+
+# Try to load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv is optional
+
 from orgo import Computer
 
 # Configure logging

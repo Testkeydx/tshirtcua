@@ -21,6 +21,16 @@ from typing import Dict, List, Tuple, Optional
 import logging
 from datetime import datetime
 
+# Google Drive API imports
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.errors import HttpError
+    GOOGLE_DRIVE_AVAILABLE = True
+except ImportError:
+    GOOGLE_DRIVE_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -161,19 +171,29 @@ class SizeValidator:
 class OrderProcessor:
     """Main class for processing SPS Commerce orders."""
     
-    def __init__(self, input_dir: str = 'input', output_dir: str = 'output'):
+    def __init__(
+        self, 
+        input_dir: str = 'input', 
+        output_dir: str = 'output',
+        google_drive_folder_id: Optional[str] = None,
+        google_credentials_path: Optional[str] = None
+    ):
         """
         Initialize the OrderProcessor.
         
         Args:
             input_dir: Directory containing input CSV files
             output_dir: Directory for output files
+            google_drive_folder_id: Optional Google Drive folder ID to upload output files
+            google_credentials_path: Path to Google service account credentials JSON file
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.input_dir.mkdir(exist_ok=True)
         self.validator = SizeValidator()
+        self.google_drive_folder_id = google_drive_folder_id or os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+        self.google_credentials_path = google_credentials_path or os.getenv('GOOGLE_CREDENTIALS_PATH')
     
     def combine_csv_files(self, csv_files: Optional[List[str]] = None) -> pd.DataFrame:
         """
@@ -373,6 +393,69 @@ class OrderProcessor:
         
         return pivot_df
     
+    def upload_to_google_drive(self, file_path: Path) -> Optional[str]:
+        """
+        Upload a file to Google Drive.
+        
+        Args:
+            file_path: Path to the file to upload
+            
+        Returns:
+            Google Drive file ID if successful, None otherwise
+        """
+        if not GOOGLE_DRIVE_AVAILABLE:
+            logger.error("Google Drive API libraries not installed. Install with: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib")
+            return None
+        
+        if not self.google_credentials_path:
+            logger.warning("Google credentials path not provided. Skipping Google Drive upload.")
+            return None
+        
+        if not self.google_drive_folder_id:
+            logger.warning("Google Drive folder ID not provided. Skipping Google Drive upload.")
+            return None
+        
+        try:
+            logger.info(f"Uploading {file_path.name} to Google Drive...")
+            
+            # Authenticate with service account
+            credentials = service_account.Credentials.from_service_account_file(
+                self.google_credentials_path,
+                scopes=['https://www.googleapis.com/auth/drive.file']
+            )
+            service = build('drive', 'v3', credentials=credentials)
+            
+            # Prepare file metadata
+            file_metadata = {
+                'name': file_path.name,
+                'parents': [self.google_drive_folder_id] if self.google_drive_folder_id else None
+            }
+            
+            # Upload file
+            media = MediaFileUpload(str(file_path), mimetype='text/csv', resumable=True)
+            file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            
+            file_id = file.get('id')
+            logger.info(f"✓ Successfully uploaded {file_path.name} to Google Drive")
+            logger.info(f"  File ID: {file_id}")
+            logger.info(f"  View at: https://drive.google.com/file/d/{file_id}/view")
+            
+            return file_id
+            
+        except FileNotFoundError:
+            logger.error(f"Google credentials file not found: {self.google_credentials_path}")
+            return None
+        except HttpError as e:
+            logger.error(f"Google Drive API error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error uploading to Google Drive: {e}", exc_info=True)
+            return None
+    
     def process_orders(self, csv_files: Optional[List[str]] = None,
                       sku_info: Optional[Dict[str, Dict]] = None,
                       output_prefix: str = 'processed_orders') -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -411,6 +494,19 @@ class OrderProcessor:
             final_df.to_csv(final_output, index=False)
             logger.info(f"Saved final printer-ready file to {final_output}")
             
+            # Step 6: Upload to Google Drive (if configured)
+            if self.google_drive_folder_id and self.google_credentials_path:
+                logger.info("=" * 60)
+                logger.info("STEP 6: Uploading output to Google Drive")
+                logger.info("=" * 60)
+                file_id = self.upload_to_google_drive(final_output)
+                if file_id:
+                    logger.info(f"✓ Google Drive upload successful: {file_id}")
+                else:
+                    logger.warning("Google Drive upload failed or was skipped")
+            else:
+                logger.info("Skipping Google Drive upload (not configured)")
+            
             return validated_df, aggregated_df, final_df
             
         except Exception as e:
@@ -431,11 +527,20 @@ def main():
                        help='Specific CSV files to process (optional)')
     parser.add_argument('--output-prefix', type=str, default='processed_orders',
                        help='Prefix for output files (default: processed_orders)')
+    parser.add_argument('--google-drive-folder-id', type=str, default=None,
+                       help='Google Drive folder ID to upload output files (optional)')
+    parser.add_argument('--google-credentials-path', type=str, default=None,
+                       help='Path to Google service account credentials JSON file (optional)')
     
     args = parser.parse_args()
     
     # Initialize processor
-    processor = OrderProcessor(input_dir=args.input_dir, output_dir=args.output_dir)
+    processor = OrderProcessor(
+        input_dir=args.input_dir, 
+        output_dir=args.output_dir,
+        google_drive_folder_id=args.google_drive_folder_id,
+        google_credentials_path=args.google_credentials_path
+    )
     
     # Process orders
     validated_df, aggregated_df, final_df = processor.process_orders(

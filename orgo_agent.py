@@ -134,9 +134,9 @@ class OrderProcessingAgent:
         vscode_instruction = f"""
         Open Visual Studio Code (VS Code) if it's not already open.
         Navigate to the project directory: {self.project_path}
-        Open the file 'order_processor.py' in VS Code. The full path is: {self.order_processor_path}
-        Run the Python script using the terminal in VS Code. You can run it with: python {self.order_processor_path}
-        Or navigate to the project directory first: cd {self.project_path} && python order_processor.py
+        The full path is: {self.order_processor_path}
+        Run the Python script using the terminal. You can run it with: python3 {self.order_processor_path}
+        Or navigate to the project directory first: cd {self.project_path} && python3 order_processor.py
         The script should process CSV files from the 'input' directory ({os.path.join(self.project_path, 'input')}) and create output files in the 'output' directory ({os.path.join(self.project_path, 'output')}).
         Wait for the script to complete execution.
         Verify that output files have been created in the 'output' directory at {os.path.join(self.project_path, 'output')}.

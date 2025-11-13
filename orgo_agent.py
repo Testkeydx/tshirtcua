@@ -6,6 +6,7 @@ This agent automates the end-to-end order processing workflow:
 1. Downloads CSV files from GitHub Pages (simulating SPS Commerce downloads)
 2. Opens VS Code and runs order_processor.py
 3. Verifies output files are created
+4. Uploads output CSV file to Google Drive folder "TshirtCUA Outputs"
 
 Uses Claude Sonnet 4.5 with computer use capabilities via Orgo.
 """
@@ -180,6 +181,80 @@ class OrderProcessingAgent:
             logger.warning("No output files found in output directory")
             return False
     
+    def get_latest_output_file(self) -> Optional[Path]:
+        """
+        Get the path to the latest output CSV file.
+        
+        Returns:
+            Path to the latest output file, or None if not found
+        """
+        output_dir = Path(self.project_path) / "output"
+        
+        if not output_dir.exists():
+            return None
+        
+        output_files = list(output_dir.glob("processed_orders_*.csv"))
+        
+        if not output_files:
+            return None
+        
+        # Get the most recent file
+        latest_file = max(output_files, key=lambda f: f.stat().st_mtime)
+        return latest_file
+    
+    def upload_to_google_drive(self) -> None:
+        """
+        Upload the output CSV file to Google Drive via browser interaction.
+        Navigates to Google Drive, finds the "TshirtCUA Outputs" folder, and uploads the file.
+        """
+        logger.info("Starting Google Drive upload")
+        
+        # Get the latest output file
+        output_file = self.get_latest_output_file()
+        if not output_file:
+            logger.error("No output file found to upload")
+            raise ValueError("No output file found to upload")
+        
+        output_file_path = str(output_file)
+        output_file_name = output_file.name
+        
+        logger.info(f"Preparing to upload: {output_file_name}")
+        logger.info(f"File location: {output_file_path}")
+        
+        upload_instruction = f"""
+        Navigate to Google Drive in a web browser (https://drive.google.com).
+        The account should already be logged in.
+        
+        Find and open the shared folder named "TshirtCUA Outputs".
+        If you can't find it immediately, use the search function in Google Drive to search for "TshirtCUA Outputs".
+        
+        Once you're inside the "TshirtCUA Outputs" folder, upload the CSV file.
+        The file to upload is located at: {output_file_path}
+        The filename is: {output_file_name}
+        
+        To upload:
+        1. Click the "New" button or the upload icon in Google Drive
+        2. Select "File upload" or drag and drop the file
+        3. Navigate to and select the file at: {output_file_path}
+        4. Wait for the upload to complete
+        5. Verify that the file appears in the "TshirtCUA Outputs" folder
+        
+        Make sure the file is successfully uploaded before proceeding.
+        """
+        
+        try:
+            messages = self.computer.prompt(
+                upload_instruction,
+                callback=self.progress_callback,
+                model=self.model,
+                thinking_enabled=True,
+                max_iterations=self.max_iterations
+            )
+            logger.info("Google Drive upload task completed")
+        except Exception as e:
+            logger.error(f"Error during Google Drive upload: {e}", exc_info=True)
+            raise
+    
     def run(self) -> Dict[str, Any]:
         """
         Run the complete automation workflow.
@@ -192,6 +267,7 @@ class OrderProcessingAgent:
             "csv_download": False,
             "order_processing": False,
             "output_verified": False,
+            "google_drive_upload": False,
             "error": None
         }
         
@@ -226,11 +302,19 @@ class OrderProcessingAgent:
             logger.info("=" * 60)
             results["output_verified"] = self.verify_output()
             
+            # Step 4: Upload to Google Drive
+            logger.info("=" * 60)
+            logger.info("STEP 4: Uploading output to Google Drive")
+            logger.info("=" * 60)
+            self.upload_to_google_drive()
+            results["google_drive_upload"] = True
+            
             # Overall success
             results["success"] = (
                 results["csv_download"] and
                 results["order_processing"] and
-                results["output_verified"]
+                results["output_verified"] and
+                results["google_drive_upload"]
             )
             
             logger.info("=" * 60)
@@ -239,6 +323,7 @@ class OrderProcessingAgent:
             logger.info(f"CSV Download: {'✓' if results['csv_download'] else '✗'}")
             logger.info(f"Order Processing: {'✓' if results['order_processing'] else '✗'}")
             logger.info(f"Output Verified: {'✓' if results['output_verified'] else '✗'}")
+            logger.info(f"Google Drive Upload: {'✓' if results['google_drive_upload'] else '✗'}")
             logger.info(f"Overall Success: {'✓' if results['success'] else '✗'}")
             
         except Exception as e:

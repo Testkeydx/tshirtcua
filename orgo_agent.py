@@ -43,6 +43,7 @@ class OrderProcessingAgent:
         self,
         github_pages_url: str,
         project_path: Optional[str] = None,
+        computer_id: Optional[str] = None,
         model: str = "claude-sonnet-4-5-20250929",
         max_iterations: int = 30
     ):
@@ -52,6 +53,7 @@ class OrderProcessingAgent:
         Args:
             github_pages_url: URL to GitHub Pages containing CSV files
             project_path: Path to the project directory (default: /home/user/Desktop/tshirtcua for Orgo VM)
+            computer_id: Optional Orgo computer ID to connect to existing computer
             model: Claude model to use (default: Claude Sonnet 4.5)
             max_iterations: Maximum number of agent loop iterations
         """
@@ -59,6 +61,7 @@ class OrderProcessingAgent:
         # Default to Orgo VM path if not specified
         self.project_path = project_path or "/home/user/Desktop/tshirtcua"
         self.order_processor_path = os.path.join(self.project_path, "order_processor.py")
+        self.computer_id = computer_id
         self.model = model
         self.max_iterations = max_iterations
         self.computer: Optional[Computer] = None
@@ -194,9 +197,14 @@ class OrderProcessingAgent:
         
         try:
             # Initialize computer
-            logger.info("Initializing Orgo computer...")
-            self.computer = Computer()
-            logger.info("Computer initialized successfully")
+            if self.computer_id:
+                logger.info(f"Connecting to existing Orgo computer: {self.computer_id}")
+                self.computer = Computer(computer_id=self.computer_id)
+                logger.info(f"Connected to computer {self.computer_id} successfully")
+            else:
+                logger.info("Initializing new Orgo computer...")
+                self.computer = Computer()
+                logger.info("Computer initialized successfully")
             
             # Step 1: Download CSV files
             logger.info("=" * 60)
@@ -239,14 +247,17 @@ class OrderProcessingAgent:
             results["success"] = False
         
         finally:
-            # Cleanup
-            if self.computer:
+            # Cleanup - only destroy if we created a new computer
+            # If using an existing computer_id, don't destroy it
+            if self.computer and not self.computer_id:
                 try:
                     logger.info("Cleaning up computer instance...")
                     self.computer.destroy()
                     logger.info("Computer instance destroyed")
                 except Exception as e:
                     logger.error(f"Error destroying computer: {e}", exc_info=True)
+            elif self.computer_id:
+                logger.info(f"Leaving computer {self.computer_id} running (not destroyed)")
         
         return results
 
@@ -271,6 +282,12 @@ def main():
         help='Path to project directory (default: /home/user/Desktop/tshirtcua for Orgo VM)'
     )
     parser.add_argument(
+        '--computer-id',
+        type=str,
+        default=None,
+        help='Orgo computer ID to connect to existing computer (optional)'
+    )
+    parser.add_argument(
         '--model',
         type=str,
         default='claude-sonnet-4-5-20250929',
@@ -289,6 +306,7 @@ def main():
     agent = OrderProcessingAgent(
         github_pages_url=args.github_url,
         project_path=args.project_path,
+        computer_id=args.computer_id,
         model=args.model,
         max_iterations=args.max_iterations
     )

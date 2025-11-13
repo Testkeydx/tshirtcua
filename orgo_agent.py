@@ -43,12 +43,14 @@ class OrderProcessingAgent:
         
         Args:
             github_pages_url: URL to GitHub Pages containing CSV files
-            project_path: Path to the project directory (default: current directory)
+            project_path: Path to the project directory (default: /home/user/Desktop/tshirtcua for Orgo VM)
             model: Claude model to use (default: Claude Sonnet 4.5)
             max_iterations: Maximum number of agent loop iterations
         """
         self.github_pages_url = github_pages_url
-        self.project_path = project_path or os.getcwd()
+        # Default to Orgo VM path if not specified
+        self.project_path = project_path or "/home/user/Desktop/tshirtcua"
+        self.order_processor_path = os.path.join(self.project_path, "order_processor.py")
         self.model = model
         self.max_iterations = max_iterations
         self.computer: Optional[Computer] = None
@@ -92,10 +94,11 @@ class OrderProcessingAgent:
         
         download_instruction = f"""
         Navigate to {self.github_pages_url} in a web browser.
-        Download all CSV files from the page to the 'input' directory in the current project.
+        Download all CSV files from the page to the 'input' directory in the project.
         The project is located at: {self.project_path}
+        The input directory should be at: {os.path.join(self.project_path, 'input')}
         Make sure to save the files with their original names in the input folder.
-        After downloading, verify that the CSV files are in the input directory.
+        After downloading, verify that the CSV files are in the input directory at {os.path.join(self.project_path, 'input')}.
         """
         
         try:
@@ -120,11 +123,12 @@ class OrderProcessingAgent:
         vscode_instruction = f"""
         Open Visual Studio Code (VS Code) if it's not already open.
         Navigate to the project directory: {self.project_path}
-        Open the file 'order_processor.py' in VS Code.
-        Run the Python script 'order_processor.py' using the terminal in VS Code.
-        The script should process CSV files from the 'input' directory and create output files in the 'output' directory.
+        Open the file 'order_processor.py' in VS Code. The full path is: {self.order_processor_path}
+        Run the Python script using the terminal in VS Code. You can run it with: python {self.order_processor_path}
+        Or navigate to the project directory first: cd {self.project_path} && python order_processor.py
+        The script should process CSV files from the 'input' directory ({os.path.join(self.project_path, 'input')}) and create output files in the 'output' directory ({os.path.join(self.project_path, 'output')}).
         Wait for the script to complete execution.
-        Verify that output files have been created in the 'output' directory.
+        Verify that output files have been created in the 'output' directory at {os.path.join(self.project_path, 'output')}.
         """
         
         try:
@@ -256,7 +260,7 @@ def main():
         '--project-path',
         type=str,
         default=None,
-        help='Path to project directory (default: current directory)'
+        help='Path to project directory (default: /home/user/Desktop/tshirtcua for Orgo VM)'
     )
     parser.add_argument(
         '--model',
